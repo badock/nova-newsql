@@ -2685,9 +2685,13 @@ def _instance_update(context, instance_uuid, values, expected, original=None):
 
     compare = models.Instance(uuid=instance_uuid, **expected)
     try:
-        instance_ref = model_query(context, models.Instance,
-                                   project_only=True).\
-                       update_on_match(compare, 'uuid', values)
+        # instance_ref = model_query(context, models.Instance,
+        #                            project_only=True).\
+        #                update_on_match(compare, 'uuid', values)
+        instance_ref = model_query(context, models.Instance).filter_by(uuid=instance_uuid).first()
+        for k in values:
+            instance_ref[k] = values[k]
+        instance_ref.save(context.session)
     except update_match.NoRowsMatched:
         # Update failed. Try to find why and raise a specific error.
 
@@ -2823,11 +2827,11 @@ def instance_info_cache_update(context, instance_uuid, values):
         needs_create = True
 
     try:
-        with main_context_manager.writer.savepoint.using(context):
-            if needs_create:
-                info_cache.save(context.session)
-            else:
-                info_cache.update(values)
+        # with main_context_manager.writer.savepoint.using(context):
+        if needs_create:
+            info_cache.save(context.session)
+        else:
+            info_cache.update(values)
     except db_exc.DBDuplicateEntry:
         # NOTE(sirp): Possible race if two greenthreads attempt to
         # recreate the instance cache entry at the same time. First one
@@ -4219,13 +4223,14 @@ def security_group_create(context, values):
     # once save() is called.  This will get cleaned up in next orm pass.
     security_group_ref.rules
     security_group_ref.update(values)
-    try:
-        with main_context_manager.writer.savepoint.using(context):
-            security_group_ref.save(context.session)
-    except db_exc.DBDuplicateEntry:
-        raise exception.SecurityGroupExists(
-                project_id=values['project_id'],
-                security_group_name=values['name'])
+    security_group_ref.save(context.session)
+    # try:
+    #    with main_context_manager.writer.savepoint.using(context):
+    #        security_group_ref.save(context.session)
+    # except db_exc.DBDuplicateEntry:
+    #     raise exception.SecurityGroupExists(
+    #             project_id=values['project_id'],
+    #             security_group_name=values['name'])
     return security_group_ref
 
 
@@ -5162,17 +5167,16 @@ def flavor_extra_specs_update_or_create(context, flavor_id, specs,
             for spec_ref in spec_refs:
                 key = spec_ref["key"]
                 existing_keys.add(key)
-                with main_context_manager.writer.savepoint.using(context):
-                    spec_ref.update({"value": specs[key]})
+                # with main_context_manager.writer.savepoint.using(context):
+                spec_ref.update({"value": specs[key]})
 
             for key, value in specs.items():
                 if key in existing_keys:
                     continue
                 spec_ref = models.InstanceTypeExtraSpecs()
-                with main_context_manager.writer.savepoint.using(context):
-                    spec_ref.update({"key": key, "value": value,
-                                     "instance_type_id": instance_type_id})
-                    context.session.add(spec_ref)
+                # with main_context_manager.writer.savepoint.using(context):
+                spec_ref.update({"key": key, "value": value, "instance_type_id": instance_type_id})
+                context.session.add(spec_ref)
 
             return specs
         except db_exc.DBDuplicateEntry:
@@ -6762,8 +6766,8 @@ def instance_tag_add(context, instance_uuid, tag):
 
     try:
         _check_instance_exists_in_project(context, instance_uuid)
-        with get_context_manager(context).writer.savepoint.using(context):
-            context.session.add(tag_ref)
+        # with get_context_manager(context).writer.savepoint.using(context):
+        context.session.add(tag_ref)
     except db_exc.DBDuplicateEntry:
         # NOTE(snikitin): We should ignore tags duplicates
         pass
